@@ -84,11 +84,11 @@ namespace cnpy {
     template<> std::vector<char>& operator+=(std::vector<char>& lhs, const char* rhs);
 
 
-    template<typename T> void npy_save(const std::string& fname, const T* data, const std::vector<size_t> shape, bool col_major=true, std::string mode="w") {
+    template<typename T> void npy_save(const std::string& fname, const T* data, const std::vector<size_t> shape, bool col_major=true, char mode='w') {
         FILE* fp = NULL;
         std::vector<size_t> true_data_shape; //if appending, the shape of existing + new data
 
-        if(mode == "a") fp = fopen(fname.c_str(),"r+b");
+        if(mode == 'a') fp = fopen(fname.c_str(),"r+b");
 
         if(fp) {
             //file exists. we need to append to it. read the header, modify the array size
@@ -131,7 +131,7 @@ namespace cnpy {
         fclose(fp);
     }
 
-    template<typename T> void npz_save(std::string zipname, std::string fname, const T* data, const std::vector<size_t>& shape, bool col_major=true, std::string mode="w")
+    template<typename T> void npz_save(std::string zipname, std::string fname, const T* data, const std::vector<size_t>& shape, bool col_major=true, char mode='w')
     {
         //first, append a .npy to the fname
         fname += ".npy";
@@ -142,7 +142,7 @@ namespace cnpy {
         size_t global_header_offset = 0;
         std::vector<char> global_header;
 
-        if(mode == "a") fp = fopen(zipname.c_str(),"r+b");
+        if(mode == 'a') fp = fopen(zipname.c_str(),"r+b");
 
         if(fp) {
             //zip file exists. we need to add a new npy file to it.
@@ -223,16 +223,12 @@ namespace cnpy {
         fclose(fp);
     }
 
-    template<typename T> void npy_save(std::string fname, const std::vector<T> data, std::string mode = "w") {
-        std::vector<size_t> shape;
-        shape.push_back(data.size());
-        npy_save(fname, &data[0], shape, mode);
+    template<typename T> void npy_save(std::string fname, const std::vector<T> data, char mode = 'w') {
+        npy_save(fname, &data[0], {data.size()}, mode);
     }
 
-    template<typename T> void npz_save(std::string zipname, std::string fname, const std::vector<T> data, std::string mode = "w") {
-        std::vector<size_t> shape;
-        shape.push_back(data.size());
-        npz_save(zipname, fname, &data[0], shape, mode);
+    template<typename T> void npz_save(std::string zipname, std::string fname, const std::vector<T> data, char mode = 'w') {
+        npz_save(zipname, fname, &data[0], {data.size()}, mode);
     }
 
     template<typename T> std::vector<char> create_npy_header(const std::vector<size_t>& shape, bool col_major) {  
