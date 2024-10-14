@@ -63,7 +63,7 @@ namespace cnpy {
 
     char BigEndianTest();
     char map_type(const std::type_info& t);
-    template<typename T> std::vector<char> create_npy_header(const std::vector<size_t>& shape);
+    template<typename T> std::vector<char> create_npy_header(const std::vector<size_t>& shape, bool col_major);
     void parse_npy_header(FILE* fp,size_t& word_size, std::vector<size_t>& shape, bool& fortran_order);
     void parse_npy_header(unsigned char* buffer,size_t& word_size, std::vector<size_t>& shape, bool& fortran_order);
     void parse_zip_footer(FILE* fp, uint16_t& nrecs, size_t& global_header_size, size_t& global_header_offset);
@@ -84,7 +84,7 @@ namespace cnpy {
     template<> std::vector<char>& operator+=(std::vector<char>& lhs, const char* rhs);
 
 
-    template<typename T> void npy_save(const std::string& fname, const T* data, const std::vector<size_t> shape, std::string mode = "w") {
+    template<typename T> void npy_save(const std::string& fname, const T* data, const std::vector<size_t> shape, bool col_major=true, std::string mode="w") {
         FILE* fp = NULL;
         std::vector<size_t> true_data_shape; //if appending, the shape of existing + new data
 
@@ -95,21 +95,23 @@ namespace cnpy {
             size_t word_size;
             bool fortran_order;
             parse_npy_header(fp,word_size,true_data_shape,fortran_order);
-            assert(!fortran_order);
+            if ( fortran_order != col_major ) {
+                throw std::runtime_error("Attached shape order is inconsistent");
+            }
 
             if(word_size != sizeof(T)) {
                 std::cout<<"libnpy error: "<<fname<<" has word size "<<word_size<<" but npy_save appending data sized "<<sizeof(T)<<"\n";
-                assert( word_size == sizeof(T) );
+                throw std::runtime_error("libnpy error");
             }
             if(true_data_shape.size() != shape.size()) {
                 std::cout<<"libnpy error: npy_save attempting to append misdimensioned data to "<<fname<<"\n";
-                assert(true_data_shape.size() != shape.size());
+                throw std::runtime_error("libnpy error");
             }
 
             for(size_t i = 1; i < shape.size(); i++) {
                 if(shape[i] != true_data_shape[i]) {
                     std::cout<<"libnpy error: npy_save attempting to append misshaped data to "<<fname<<"\n";
-                    assert(shape[i] == true_data_shape[i]);
+                    throw std::runtime_error("libnpy error");
                 }
             }
             true_data_shape[0] += shape[0];
@@ -119,7 +121,7 @@ namespace cnpy {
             true_data_shape = shape;
         }
 
-        std::vector<char> header = create_npy_header<T>(true_data_shape);
+        std::vector<char> header = create_npy_header<T>(true_data_shape, col_major);
         size_t nels = std::accumulate(shape.begin(),shape.end(),std::size_t(1),std::multiplies<size_t>());
 
         fseek(fp,0,SEEK_SET);
@@ -129,7 +131,7 @@ namespace cnpy {
         fclose(fp);
     }
 
-    template<typename T> void npz_save(std::string zipname, std::string fname, const T* data, const std::vector<size_t>& shape, std::string mode = "w")
+    template<typename T> void npz_save(std::string zipname, std::string fname, const T* data, const std::vector<size_t>& shape, bool col_major=true, std::string mode="w")
     {
         //first, append a .npy to the fname
         fname += ".npy";
@@ -161,7 +163,7 @@ namespace cnpy {
             fp = fopen(zipname.c_str(),"wb");
         }
 
-        std::vector<char> npy_header = create_npy_header<T>(shape);
+        std::vector<char> npy_header = create_npy_header<T>(shape, col_major);
 
         size_t nels = std::accumulate(shape.begin(),shape.end(),std::size_t(1),std::multiplies<size_t>());
         size_t nbytes = nels*sizeof(T) + npy_header.size();
@@ -233,14 +235,18 @@ namespace cnpy {
         npz_save(zipname, fname, &data[0], shape, mode);
     }
 
-    template<typename T> std::vector<char> create_npy_header(const std::vector<size_t>& shape) {  
+    template<typename T> std::vector<char> create_npy_header(const std::vector<size_t>& shape, bool col_major) {  
 
         std::vector<char> dict;
         dict += "{'descr': '";
         dict += BigEndianTest();
         dict += map_type(typeid(T));
         dict += std::to_string(sizeof(T));
-        dict += "', 'fortran_order': False, 'shape': (";
+        if ( col_major ) {
+            dict += "', 'fortran_order': True, 'shape': (";
+        } else {
+            dict += "', 'fortran_order': False, 'shape': (";
+        }
         dict += std::to_string(shape[0]);
         for(size_t i = 1;i < shape.size();i++) {
             dict += ", ";
